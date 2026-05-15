@@ -35,7 +35,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
-
+.env
 # Cache Files
 .cache/
 .parcel-cache/
