@@ -6,79 +6,120 @@ const mongoose = require("mongoose");
 const http = require("http");
 const { Server } = require("socket.io");
 
-// Routes
+// ================= ROUTES =================
 const authRoutes = require("./routes/auth");
 const exportRoutes = require("./routes/export");
 const resumeRoutes = require("./routes/resume");
-const interviewRoutes = require("./routes/interview");
+const interviewRoutes = require("./routes/interview"); // Handles all /start, /question, /answer, /finalize endpoints
 const performanceRoute = require("./routes/performance");
-
+const dashboardRoute = require("./routes/dashboard");
+// ================= APP =================
 const app = express();
 const server = http.createServer(app);
 
-// Socket setup
+// ================= SOCKET SETUP =================
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
 });
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// ================= MAKE IO GLOBAL =================
+global.io = io;
 
-// Debug env
+// ================= MIDDLEWARE =================
+app.use(cors());
+app.use(express.json({ limit: "5mb" })); // Boosted to handle large resume parsing texts seamlessly
+
+// ================= MAKE IO AVAILABLE IN CONTROLLERS =================
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
+// ================= DEBUG ENV =================
 console.log("Groq key loaded:", !!process.env.GROQ_API_KEY);
 
-// Test route
+// ================= TEST ROUTE =================
 app.post("/api/test", (req, res) => {
   console.log("📩 Data received from frontend:", req.body);
   res.json({ message: "Hello frontend, backend is connected!" });
 });
 
-// Routes
+// ================= ROUTES DECLARATIONS =================
 app.use("/api/auth", authRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/resume", resumeRoutes);
-app.use("/api/interview", interviewRoutes);
+app.use("/api/interview", interviewRoutes); 
+// ✅ FIXED: Removed the undefined interviewServices route that was breaking compilation
 app.use("/api/performance", performanceRoute);
-
-// MongoDB connection (FIXED)
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+app.use("/api/dashboard", dashboardRoute);
+// ================= MONGODB CONNECTION =================
+mongoose.connect(process.env.MONGO_URI)
+.then(() => {
+  console.log("✅ MongoDB connected to production cluster data index records");
 })
-.then(() => console.log("✅ MongoDB connected"))
 .catch((err) => {
   console.error("❌ MongoDB connection error:", err.message);
-  process.exit(1); // stop server if DB fails
+  process.exit(1);
 });
 
-// Socket.io
+// ================= SOCKET USER MAP =================
+const userSockets = new Map();
+
+// ================= SOCKET EVENTS =================
 io.on("connection", (socket) => {
   console.log("👤 User connected:", socket.id);
 
-  socket.on("startInterview", (data) => {
-    console.log("🎤 Interview started:", data.userId);
-
-    socket.emit("newQuestion", "Tell me about yourself.");
+  // ================= USER JOIN =================
+  socket.on("userJoin", (userId) => {
+    userSockets.set(userId, socket.id);
+    socket.join(`user-${userId}`);
+    console.log(`✅ User ${userId} joined room`);
   });
 
-  socket.on("answer", (data) => {
-    console.log("📝 User answer:", data);
-
-    socket.emit("feedback", {
-      score: 80,
-      advice: "Good answer, improve confidence."
+  // ================= INTERVIEW COMPLETED =================
+  socket.on("interviewCompleted", (data) => {
+    console.log("🎤 Interview completed:", data.userId);
+    io.to(`user-${data.userId}`).emit("dashboardUpdate", {
+      type: "newInterview",
+      data
     });
   });
 
+  // ================= RESUME ANALYSIS COMPLETED =================
+  socket.on("resumeAnalysed", (data) => {
+    console.log("📄 Resume analysed:", data.userId);
+    io.to(`user-${data.userId}`).emit("dashboardUpdate", {
+      type: "resumeUpdated",
+      data
+    });
+  });
+
+  // ================= PERFORMANCE UPDATED =================
+  socket.on("performanceUpdated", (data) => {
+    console.log("📊 Performance updated:", data.userId);
+    io.to(`user-${data.userId}`).emit("dashboardUpdate", {
+      type: "performanceUpdated",
+      data
+    });
+  });
+
+  // ================= DISCONNECT =================
   socket.on("disconnect", () => {
     console.log("❌ User disconnected:", socket.id);
+    for (let [userId, sockId] of userSockets.entries()) {
+      if (sockId === socket.id) {
+        userSockets.delete(userId);
+        break;
+      }
+    }
   });
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-
+// ================= START SERVER =================
+const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Production server running beautifully on port ${PORT}`);
 });
