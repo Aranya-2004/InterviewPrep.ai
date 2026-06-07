@@ -1,5 +1,5 @@
 // controllers/resumeController.js
-const Resume = require("../models/Resume");
+const Resume = require("../models/resume");
 const { analyzeResume } = require("../services/ai");
 const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
