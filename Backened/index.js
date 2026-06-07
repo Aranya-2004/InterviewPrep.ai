@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 const http = require("http");
+const net = require("net");
 const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
@@ -128,7 +129,46 @@ io.on("connection", (socket) => {
 });
 
 // ================= START SERVER =================
-const PORT = process.env.PORT || 5001;
-server.listen(PORT, () => {
-  console.log(`🚀 Production server running beautifully on port ${PORT}`);
+const DEFAULT_PORT = 5001;
+const FALLBACK_PORTS = [5002, 5003];
+const requestedPort = process.env.PORT ? Number(process.env.PORT) : DEFAULT_PORT;
+const candidatePorts = process.env.PORT ? [requestedPort] : [requestedPort, ...FALLBACK_PORTS];
+
+const checkPortAvailable = (port) => new Promise((resolve) => {
+  const tester = net.createServer()
+    .once("error", () => {
+      tester.close();
+      resolve(false);
+    })
+    .once("listening", () => {
+      tester.close(() => resolve(true));
+    })
+    .listen(port, "0.0.0.0");
 });
+
+const getAvailablePort = async () => {
+  for (const port of candidatePorts) {
+    const available = await checkPortAvailable(port);
+    if (available) return port;
+  }
+  return null;
+};
+
+const startServer = async () => {
+  const port = await getAvailablePort();
+  if (!port) {
+    console.error(`❌ No available ports found. Please free port ${requestedPort} or set PORT to a free port.`);
+    process.exit(1);
+  }
+
+  server.on("error", (error) => {
+    console.error("❌ Server error:", error);
+    process.exit(1);
+  });
+
+  server.listen(port, () => {
+    console.log(`🚀 Production server running beautifully on port ${port}`);
+  });
+};
+
+startServer();

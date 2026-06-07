@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Interview = require("../models/Interview");
-const Resume = require("../models/Resume");
+const Resume = require("../models/resume");
 const { protect } = require("../middleware/authMiddleware");
 
 router.get("/", protect, async (req, res) => {
