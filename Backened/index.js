@@ -5,6 +5,15 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const http = require("http");
 const { Server } = require("socket.io");
+const fs = require("fs");
+const path = require("path");
+
+// ================= CREATE UPLOADS DIRECTORY IF NOT EXISTS =================
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log("✅ Created uploads directory");
+}
 
 // ================= ROUTES =================
 const authRoutes = require("./routes/auth");

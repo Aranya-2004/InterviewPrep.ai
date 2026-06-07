@@ -60,12 +60,11 @@ export default function ResumeUpload() {
 
       console.log(`📡 Dispatching secure telemetry payload stack to: ${BASE_URL}/api/resume`);
 
+      const headers = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
       const res = await axios.post(`${BASE_URL}/api/resume`, fd, {
-        headers: { 
-          "Content-Type": "multipart/form-data",
-          // ✅ SECURED: Injects authorization token signature to clear 401 barriers
-          "Authorization": `Bearer ${token}` 
-        },
+        headers,
         onUploadProgress: ev => setUploadProgress(Math.round((ev.loaded * 100) / ev.total)),
       });
 
@@ -76,11 +75,18 @@ export default function ResumeUpload() {
     } catch (err) {
       console.error("Upload error details:", err);
       const s = err.response?.status;
-      if (s === 429)         { setMessage("AI quota exceeded. Showing keyword analysis only."); }
-      else if (s === 401)    { setMessage("Session authentication failed. Please re-login."); }
-      else if (s === 404)    { setMessage("Target deployment endpoint path not found (404). Check route configurations."); }
-      else if (err.response) { setMessage("Server error while analysing resume context records."); }
-      else                   { setMessage("Backend application server not responding."); }
+      const serverMessage = err.response?.data?.message;
+      if (s === 429) {
+        setMessage(serverMessage || "AI quota exceeded. Showing keyword analysis only.");
+      } else if (s === 401) {
+        setMessage(serverMessage || "Session authentication failed. Please re-login.");
+      } else if (s === 404) {
+        setMessage(serverMessage || "Target deployment endpoint path not found (404). Check route configurations.");
+      } else if (err.response) {
+        setMessage(serverMessage || "Server error while analysing resume context records.");
+      } else {
+        setMessage("Backend application server not responding.");
+      }
       setMsgType("error");
     } finally { setUploading(false); setUploadProgress(0); }
   };
@@ -93,6 +99,22 @@ export default function ResumeUpload() {
 
   const scoreColor  = s => s >= 75 ? "#059669" : s >= 50 ? "#d97706" : "#dc2626";
   const selectedRole = JOB_ROLES.find(r => r.value === jobRole);
+  const rawScore = analysis ? (analysis.atsScore ?? analysis.score ?? 0) : 0;
+  const score = Math.max(0, Math.min(100, Number(rawScore) || 0));
+  const detailedBreakdown = analysis?.detailedBreakdown || {};
+  const sectionAnalysis = analysis?.sectionAnalysis || {};
+  const keywordGaps = analysis?.keywordGaps || { highPriority: [], mediumPriority: [], lowPriority: [] };
+  const comparison = analysis?.jobDescriptionComparison || {};
+  const recruiterView = analysis?.recruiterView || { impressionScore: 0, strengths: [], concerns: [] };
+  const readinessMeter = analysis?.readinessMeter || {
+    overallReadiness: 0,
+    technicalSkills: 0,
+    projects: 0,
+    interviewReadiness: 0,
+    systemDesign: 0
+  };
+  const roadmap = analysis?.roadmap || [];
+  const aiFeedback = analysis?.aiFeedback;
 
   const css = `
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,700;0,900;1,300&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap');
@@ -273,6 +295,40 @@ export default function ResumeUpload() {
     .ru-kw-chip.matched { background: rgba(5,150,105,.08);  border:1px solid rgba(5,150,105,.22); color:#059669; }
     .ru-kw-chip.missing  { background: rgba(220,38,38,.06);  border:1px solid rgba(220,38,38,.2);  color:#dc2626; }
 
+    .ru-score-breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+    @media (max-width: 760px) { .ru-score-breakdown { grid-template-columns: 1fr; } }
+    .ru-breakdown-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 1rem; }
+    .ru-breakdown-title { font-size: .78rem; font-weight: 700; color: #475569; margin-bottom: .5rem; }
+    .ru-breakdown-value { font-size: 1.3rem; font-weight: 800; color: #111827; }
+
+    .ru-section-analysis { display: grid; gap: 1rem; margin-bottom: 1.25rem; }
+    .ru-section-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    @media (max-width: 760px) { .ru-section-row { grid-template-columns: 1fr; } }
+    .ru-section-analysis p { color: #64748b; margin-top: .5rem; line-height: 1.75; }
+
+    .ru-keyword-gap { display: grid; gap: 1rem; margin-bottom: 1.25rem; }
+    .ru-keyword-group { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 1rem; }
+    .ru-keyword-group-title { font-size: .8rem; font-weight: 700; color: #334155; margin-bottom: .75rem; }
+
+    .ru-comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+    @media (max-width: 760px) { .ru-comparison-grid { grid-template-columns: 1fr; } }
+    .ru-comparison-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 1rem; }
+    .ru-comparison-title { font-size: .75rem; color: #64748b; margin-bottom: .55rem; text-transform: uppercase; letter-spacing: 1px; }
+
+    .ru-achievement-card,
+    .ru-recruiter-card,
+    .ru-readiness-meter,
+    .ru-roadmap,
+    .ru-feedback-section { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 1rem; margin-bottom: 1.25rem; }
+    .ru-score-big { font-size: 2rem; font-weight: 800; color: #111827; margin-top: .5rem; }
+    .ru-score-small { font-size: .95rem; font-weight: 700; margin: .6rem 0; color: #334155; }
+    .ru-mini-list strong { display: block; margin-top: .8rem; color: #0f172a; }
+    .ru-mini-list ul { margin: .6rem 0 0 1.3rem; color: #475569; }
+    .ru-readiness-meter .ru-meter-row { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid #e2e8f0; color: #334155; }
+    .ru-readiness-meter .ru-meter-row:last-child { border-bottom: none; }
+    .ru-roadmap ol { padding-left: 1.2rem; color: #475569; }
+    .ru-roadmap li { margin-bottom: .75rem; }
+
     .ru-feedback { background: rgba(99,102,241,.05); border: 1.5px solid rgba(99,102,241,.15); border-radius: 14px; padding: 1.25rem; }
     .ru-feedback-title { font-size: .65rem; font-family: 'DM Mono', monospace; letter-spacing: 2px; text-transform: uppercase; color: #4f46e5; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
     .ru-feedback-title::before { content: '✦'; font-size: .8rem; }
@@ -415,13 +471,11 @@ export default function ResumeUpload() {
                     <div
                       className="ru-score-ring"
                       style={{
-                        border:`4px solid ${scoreColor(analysis.atsScore || analysis.score || 0)}`,
-                        background:`${scoreColor(analysis.atsScore || analysis.score || 0)}12`,
+                        border:`4px solid ${scoreColor(score)}`,
+                        background:`${scoreColor(score)}12`,
                       }}
                     >
-                      <span className="ru-score-num" style={{ color:scoreColor(analysis.atsScore || analysis.score || 0) }}>
-                        {analysis.atsScore || analysis.score || 0}
-                      </span>
+                      <span className="ru-score-num" style={{ color:scoreColor(score) }}>{score}</span>
                       <span className="ru-score-pct">ATS</span>
                     </div>
                     <div className="ru-score-info" style={{ flex:1 }}>
@@ -431,15 +485,142 @@ export default function ResumeUpload() {
                         <div
                           className="ru-ats-fill"
                           style={{
-                            width:`${analysis.atsScore || analysis.score || 0}%`,
-                            background:`linear-gradient(90deg,${scoreColor(analysis.atsScore || analysis.score || 0)},${scoreColor(analysis.atsScore || analysis.score || 0)}99)`,
+                            width:`${score}%`,
+                            background:`linear-gradient(90deg,${scoreColor(score)},${scoreColor(score)}99)`,
                           }}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {Array.isArray(analysis.matchedKeywords) && analysis.matchedKeywords.length > 0 && (
+                  <div className="ru-score-breakdown">
+                    <div className="ru-breakdown-card">
+                      <div className="ru-breakdown-title">Skills Match</div>
+                      <div className="ru-breakdown-value">{detailedBreakdown.skillsMatch ?? 0}/100</div>
+                    </div>
+                    <div className="ru-breakdown-card">
+                      <div className="ru-breakdown-title">Experience</div>
+                      <div className="ru-breakdown-value">{detailedBreakdown.experience ?? 0}/100</div>
+                    </div>
+                    <div className="ru-breakdown-card">
+                      <div className="ru-breakdown-title">Projects</div>
+                      <div className="ru-breakdown-value">{detailedBreakdown.projects ?? 0}/100</div>
+                    </div>
+                    <div className="ru-breakdown-card">
+                      <div className="ru-breakdown-title">Education</div>
+                      <div className="ru-breakdown-value">{detailedBreakdown.education ?? 0}/100</div>
+                    </div>
+                    <div className="ru-breakdown-card">
+                      <div className="ru-breakdown-title">Formatting</div>
+                      <div className="ru-breakdown-value">{detailedBreakdown.formatting ?? 0}/100</div>
+                    </div>
+                  </div>
+
+                  <div className="ru-section-analysis">
+                    <h5>Section-by-Section Analysis</h5>
+                    <div className="ru-section-row">
+                      <div>
+                        <strong>Skills</strong>
+                        <p>{sectionAnalysis.skills || "No specific skills section feedback available."}</p>
+                      </div>
+                      <div>
+                        <strong>Projects</strong>
+                        <p>{sectionAnalysis.projects || "No specific projects section feedback available."}</p>
+                      </div>
+                    </div>
+                    <div className="ru-section-row">
+                      <div>
+                        <strong>Experience</strong>
+                        <p>{sectionAnalysis.experience || "No specific experience section feedback available."}</p>
+                      </div>
+                      <div>
+                        <strong>Education</strong>
+                        <p>{sectionAnalysis.education || "No specific education section feedback available."}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="ru-keyword-gap">
+                    <h5>Keyword Gap Analysis</h5>
+                    <div className="ru-keyword-group">
+                      <div className="ru-keyword-group-title">High Priority Missing</div>
+                      {keywordGaps.highPriority.length > 0 ? (
+                        <ul>{keywordGaps.highPriority.map((k,i) => <li key={i}>{k}</li>)}</ul>
+                      ) : <p className="ru-muted">Nothing critical missing.</p>}
+                    </div>
+                    <div className="ru-keyword-group">
+                      <div className="ru-keyword-group-title">Medium Priority</div>
+                      {keywordGaps.mediumPriority.length > 0 ? (
+                        <ul>{keywordGaps.mediumPriority.map((k,i) => <li key={i}>{k}</li>)}</ul>
+                      ) : <p className="ru-muted">No medium priority gaps.</p>}
+                    </div>
+                    <div className="ru-keyword-group">
+                      <div className="ru-keyword-group-title">Low Priority</div>
+                      {keywordGaps.lowPriority.length > 0 ? (
+                        <ul>{keywordGaps.lowPriority.map((k,i) => <li key={i}>{k}</li>)}</ul>
+                      ) : <p className="ru-muted">No low priority gaps.</p>}
+                    </div>
+                  </div>
+
+                  <div className="ru-comparison-grid">
+                    <div className="ru-comparison-card">
+                      <div className="ru-comparison-title">Job Match Score</div>
+                      <div>{comparison.jobMatchScore ?? 0}%</div>
+                    </div>
+                    <div className="ru-comparison-card">
+                      <div className="ru-comparison-title">Technical Skills Match</div>
+                      <div>{comparison.technicalSkillsMatch ?? 0}%</div>
+                    </div>
+                    <div className="ru-comparison-card">
+                      <div className="ru-comparison-title">Experience Match</div>
+                      <div>{comparison.experienceMatch ?? 0}%</div>
+                    </div>
+                    <div className="ru-comparison-card">
+                      <div className="ru-comparison-title">Education Match</div>
+                      <div>{comparison.educationMatch ?? 0}%</div>
+                    </div>
+                  </div>
+
+                  <div className="ru-achievement-card">
+                    <div className="ru-feedback-title">Achievement Quality Score</div>
+                    <div className="ru-score-big">{analysis.achievementQualityScore ?? 0}/100</div>
+                    {analysis.achievementFeedback?.length > 0 && (
+                      <ul>{analysis.achievementFeedback.map((item,i) => <li key={i}>{item}</li>)}</ul>
+                    )}
+                  </div>
+
+                  <div className="ru-recruiter-card">
+                    <div className="ru-feedback-title">Recruiter View Simulation</div>
+                    <div className="ru-score-small">Recruiter Impression: {recruiterView.impressionScore ?? 0}/10</div>
+                    <div className="ru-mini-list">
+                      <strong>Strengths:</strong>
+                      <ul>{recruiterView.strengths.map((item,i) => <li key={i}>{item}</li>)}</ul>
+                      <strong>Concerns:</strong>
+                      <ul>{recruiterView.concerns.map((item,i) => <li key={i}>{item}</li>)}</ul>
+                    </div>
+                  </div>
+
+                  <div className="ru-readiness-meter">
+                    <div className="ru-feedback-title">Career Readiness Meter</div>
+                    <div className="ru-meter-row"><span>Overall</span><span>{readinessMeter.overallReadiness ?? 0}%</span></div>
+                    <div className="ru-meter-row"><span>Technical Skills</span><span>{readinessMeter.technicalSkills ?? 0}%</span></div>
+                    <div className="ru-meter-row"><span>Projects</span><span>{readinessMeter.projects ?? 0}%</span></div>
+                    <div className="ru-meter-row"><span>Interview Readiness</span><span>{readinessMeter.interviewReadiness ?? 0}%</span></div>
+                    <div className="ru-meter-row"><span>System Design</span><span>{readinessMeter.systemDesign ?? 0}%</span></div>
+                  </div>
+
+                  {roadmap.length > 0 && (
+                    <div className="ru-roadmap">
+                      <div className="ru-feedback-title">30-Day Learning Roadmap</div>
+                      <ol>
+                        {roadmap.map((item,i) => (
+                          <li key={i}><strong>{item.week}:</strong> {item.focus}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  {analysis.matchedKeywords?.length > 0 && (
                     <div className="ru-kw-section">
                       <div className="ru-kw-title matched">Matched Skills ({analysis.matchedKeywords.length})</div>
                       <div className="ru-kw-chips">
@@ -448,7 +629,7 @@ export default function ResumeUpload() {
                     </div>
                   )}
 
-                  {Array.isArray(analysis.missingKeywords) && analysis.missingKeywords.length > 0 && (
+                  {analysis.missingKeywords?.length > 0 && (
                     <div className="ru-kw-section">
                       <div className="ru-kw-title missing">Missing Skills ({analysis.missingKeywords.length})</div>
                       <div className="ru-kw-chips">
@@ -457,71 +638,76 @@ export default function ResumeUpload() {
                     </div>
                   )}
 
+                  {analysis.strengths?.length > 0 && (
+                    <div className="ru-feedback-section">
+                      <div className="ru-feedback-title" style={{ color: "#059669" }}>💪 Strengths on Your Resume</div>
+                      <ul style={{ paddingLeft: "20px", lineHeight: "1.8" }}>
+                        {analysis.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {analysis.missingSkills?.length > 0 && (
+                    <div className="ru-feedback-section">
+                      <div className="ru-feedback-title" style={{ color: "#dc2626" }}>⚠️ Weaknesses / Skills to Add</div>
+                      <ul style={{ paddingLeft: "20px", lineHeight: "1.8" }}>
+                        {analysis.missingSkills.map((w,i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {analysis.suggestions?.length > 0 && (
+                    <div className="ru-feedback-section">
+                      <div className="ru-feedback-title" style={{ color: "#d97706" }}>🚀 How to Improve Your Resume</div>
+                      <ul style={{ paddingLeft: "20px", lineHeight: "1.8" }}>
+                        {analysis.suggestions.map((s,i) => <li key={i}>{s}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {analysis.atsTips?.length > 0 && (
+                    <div className="ru-feedback-section">
+                      <div className="ru-feedback-title" style={{ color: "#0891b2" }}>🎯 ATS Optimization Tips</div>
+                      <ul style={{ paddingLeft: "20px", lineHeight: "1.8" }}>
+                        {analysis.atsTips.map((t,i) => <li key={i}>{t}</li>)}</ul>
+                    </div>
+                  )}
+
                   <div className="ru-feedback">
-                    <div className="ru-feedback-title">AI Feedback</div>
-
-                    {!analysis.aiFeedback ? (
-                      <p>AI feedback processed successfully.</p>
-                    ) : typeof analysis.aiFeedback === "string" ? (
-                      <p>{analysis.aiFeedback}</p>
-                    ) : (
+                    <div className="ru-feedback-title">AI Summary</div>
+                    {typeof aiFeedback === "string" ? (
+                      <p>{aiFeedback}</p>
+                    ) : aiFeedback ? (
                       <>
-                        {Array.isArray(analysis.aiFeedback.strengths) && analysis.aiFeedback.strengths.length > 0 && (
-                          <div className="ru-fb-strengths" style={{ marginBottom: "1.25rem" }}>
-                            <h4 style={{ color: "#059669", marginBottom: "0.4rem" }}>Strengths</h4>
-                            <ul>
-                              {analysis.aiFeedback.strengths.map((item, i) => <li key={i}>{item}</li>)}
-                            </ul>
-                          </div>
-                        )}
-
-                        {Array.isArray(analysis.aiFeedback.missingSkills) && analysis.aiFeedback.missingSkills.length > 0 && (
-                          <div className="ru-fb-missing" style={{ marginBottom: "1.25rem" }}>
-                            <h4 style={{ color: "#dc2626", marginBottom: "0.4rem" }}>Missing Skills</h4>
-                            <ul>
-                              {analysis.aiFeedback.missingSkills.map((item, i) => <li key={i}>{item}</li>)}
-                            </ul>
-                          </div>
-                        )}
-
-                        {Array.isArray(analysis.aiFeedback.suggestions) && analysis.aiFeedback.suggestions.length > 0 && (
-                          <div className="ru-fb-suggestions" style={{ marginBottom: "1.25rem" }}>
-                            <h4 style={{ color: "#4f46e5", marginBottom: "0.4rem" }}>Suggestions</h4>
-                            <ul>
-                              {analysis.aiFeedback.suggestions.map((item, i) => <li key={i}>{item}</li>)}
-                            </ul>
-                          </div>
-                        )}
-
-                        {Array.isArray(analysis.aiFeedback.atsTips) && analysis.aiFeedback.atsTips.length > 0 && (
-                          <div className="ru-fb-tips" style={{ marginBottom: "0.5rem" }}>
-                            <h4 style={{ color: "#d97706", marginBottom: "0.4rem" }}>ATS Tips</h4>
-                            <ul>
-                              {analysis.aiFeedback.atsTips.map((item, i) => <li key={i}>{item}</li>)}
-                            </ul>
-                          </div>
+                        {aiFeedback.summary && <p>{aiFeedback.summary}</p>}
+                        {aiFeedback.keyTakeaways?.length > 0 && (
+                          <ul>{aiFeedback.keyTakeaways.map((item, i) => <li key={i}>{item}</li>)}</ul>
                         )}
                       </>
+                    ) : (
+                      <p>AI feedback unavailable.</p>
                     )}
                   </div>
 
-                  <button 
+                  <button
                     type="button"
-                    className="ru-submit" 
-                    style={{ 
-                      marginTop: "1.5rem", 
-                      background: "#f1f5f9", 
-                      color: "#475569", 
+                    className="ru-submit"
+                    style={{
+                      marginTop: "1.5rem",
+                      background: "#f1f5f9",
+                      color: "#475569",
                       border: "1.5px solid #cbd5e1",
-                      boxShadow: "none" 
+                      boxShadow: "none"
                     }}
                     onClick={() => {
                       setAnalysis(null);
                       setFile(null);
                       setMessage("");
+                      setUploadProgress(0);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
                   >
-                    🔄 Analyze Another Resume
+                    🔄 Analyse Another Resume
                   </button>
                 </div>
               )}

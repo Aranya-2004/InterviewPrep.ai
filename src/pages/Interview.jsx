@@ -239,7 +239,12 @@ export default function Interview() {
       setCurrentQuestion(data.question);
       setQuestionNumber(qNum);
     } catch (err) {
-      setError("Could not load question: " + err.message);
+      const message = err.message || "Failed to load the next interview question.";
+      setError(
+        message.includes("No resume text found")
+          ? "Interview session lost your resume text. Please restart the interview and upload your resume again."
+          : `Could not load question: ${message}`
+      );
     } finally {
       setLoadingQuestion(false);
     }

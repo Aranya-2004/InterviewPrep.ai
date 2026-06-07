@@ -12,6 +12,12 @@ const interviewSchema = new mongoose.Schema({
     type: String, 
     default: "Software Engineer" 
   },
+  resumeText: {
+    type: String,
+    required: true,
+    trim: true,
+    default: ""
+  },
   difficulty: { 
     type: String, 
     default: "Medium" 
