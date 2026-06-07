@@ -1,4 +1,4 @@
-const Interview = require("../models/interview");
+const Interview = require("../models/Interview");
 
 exports.getDashboardData = async (req, res) => {
 
