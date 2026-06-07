@@ -1,5 +1,5 @@
 // controllers/interviewController.js
-const Interview = require("../models/Interview");
+const Interview = require("../models/interview");
 
 // ================= SAVE INTERVIEW =================
 exports.saveInterview = async (req, res) => {
