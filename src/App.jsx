@@ -82,7 +82,7 @@ function AppContent() {
   useEffect(() => {
 
     axios.post(
-      "`${import.meta.env.VITE_API_URL}/api/test`",
+      `${import.meta.env.VITE_API_URL}/api/test`,
       {
         message: "Hello from frontend!"
       }
