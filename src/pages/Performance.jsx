@@ -147,7 +147,7 @@ export default function Performance() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    axios.get("http://localhost:5001/api/performance", {
+    axios.get(`${import.meta.env.VITE_API_URL}/api/performance`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => setD(r.data))

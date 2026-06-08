@@ -9,7 +9,7 @@ export const connectSocket = (userId) => {
 
   if (!socket) {
 
-    socket = io("http://localhost:5001", {
+    socket = io("import.meta.env.VITE_API_URL", {
 
       query: {
         userId

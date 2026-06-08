@@ -162,7 +162,7 @@ export default function Signup() {
     setError(""); setLoading(true);
 
     try {
-      await axios.post("http://localhost:5001/api/auth/signup", {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/signup`, {
         name:     name.trim(),
         email:    email.trim().toLowerCase(),
         password,
