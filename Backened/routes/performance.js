@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const Interview = require("../models/Interview");
+const Interview = require("../models/interview");
 const Resume = require("../models/resume");
 
 // ✅ FIXED: Destructured to capture 'protect' matching your middleware file exports precisely
